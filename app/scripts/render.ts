@@ -2,6 +2,7 @@
 // Offline renderer. Drives the app in headless Chrome (?export=1) and either
 //   stills:  bun scripts/render.ts stills --t 1.5,23,40.2 [--only id1,id2] [--out dir]
 //   sheet:   bun scripts/render.ts sheet --from 20 --to 35 [--n 12] [--cols 4] [--only ids] [--out file.png]   (or --times a,b,c | --cuts)
+//            --jobs N renders N segments in parallel Chromes and joins them; --nvenc encodes on an NVIDIA GPU
 //   (--chrome <path> or $CHROME_PATH picks the browser; default: Chrome on macOS, playwright's Chromium elsewhere)
 //   perf:    bun scripts/render.ts perf --from 20 --to 25 [--only ids] [--samples 1] [--shutter 0.5]   (avg ms per frame incl. GPU sync and the export's pixel readback)
 //   video:   bun scripts/render.ts video [--from 0] [--to 242.04] [--fps 60] [--crf 16] [--x264 aq-mode=3] [--samples 1] [--shutter 0.5] [--out ../out/younggirla.mp4] [--noaudio]
@@ -11,7 +12,7 @@
 //            full-res from the pixel buffer, videos are encoded at the physical size.
 // Uses the Vite dev server at --url (default http://localhost:5173); starts a private one if unreachable.
 import { chromium, type Page } from 'playwright-core';
-import { mkdirSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const argv = process.argv.slice(2);
@@ -126,17 +127,28 @@ async function sheet(page: Page, times: number[], cols: number, out: string) {
   await Bun.write(out, Buffer.from(dataUrl.split(',')[1]!, 'base64'));
 }
 
-async function video(page: Page, from: number, to: number, fps: number, out: string) {
+/** Video encoder args: x264 (default) or NVIDIA NVENC (--nvenc: the GPU encodes, the CPU stays free for Chrome). */
+function encoderArgs(crf: string) {
+  if (flag('nvenc')) return ['-c:v', 'h264_nvenc', '-preset', 'p6', '-tune', 'hq', '-rc', 'vbr', '-cq', crf, '-b:v', '0', '-pix_fmt', 'yuv420p'];
+  return ['-c:v', 'libx264', '-preset', opt('preset', 'slow')!, '-crf', crf, '-pix_fmt', 'yuv420p', '-tune', 'grain', '-x264-params', opt('x264', 'aq-mode=3')!];
+}
+
+/**
+ * Render [from, to) of the page into `out`. `audio` muxes the song's matching slice; `progress` receives
+ * the frame count (for the combined readout of parallel jobs), otherwise progress prints here.
+ */
+async function video(page: Page, from: number, to: number, fps: number, out: string, o: { audio?: boolean; progress?: (n: number) => void } = {}) {
   mkdirSync(path.dirname(out), { recursive: true });
+  const withAudio = o.audio ?? !flag('noaudio');
   const crf = opt('crf', '16')!;
   const audio = path.join(ROOT, 'audio/younggirla.mp3');
   const args = ['ffmpeg', '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${OW}x${OH}`, '-r', String(fps), '-i', 'pipe:0'];
-  if (!flag('noaudio')) args.push('-ss', String(from), '-t', String(to - from), '-i', audio);
+  if (withAudio) args.push('-ss', String(from), '-t', String(to - from), '-i', audio);
   // Frames are sRGB (toSRGB in the final pass): convert with the BT.709 matrix and tag the stream,
   // otherwise ffmpeg converts with BT.601 while players and YouTube decode untagged HD as BT.709.
   // scale tags the matrix and range; primaries and transfer need setparams (the -color_* output flags don't reach the stream).
-  args.push('-vf', 'vflip,scale=out_color_matrix=bt709,setparams=color_primaries=bt709:color_trc=bt709', '-c:v', 'libx264', '-preset', opt('preset', 'slow')!, '-crf', crf, '-pix_fmt', 'yuv420p', '-tune', 'grain', '-x264-params', opt('x264', 'aq-mode=3')!);
-  if (!flag('noaudio')) args.push('-c:a', 'aac', '-b:a', '320k', '-shortest');
+  args.push('-vf', 'vflip,scale=out_color_matrix=bt709,setparams=color_primaries=bt709:color_trc=bt709', ...encoderArgs(crf));
+  if (withAudio) args.push('-c:a', 'aac', '-b:a', '320k', '-shortest');
   args.push('-movflags', '+faststart', out);
   const ff = Bun.spawn(args, { stdin: 'pipe', stdout: 'inherit', stderr: 'inherit' });
   let frames = 0;
@@ -152,7 +164,8 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
         await ff.stdin.flush();
         frames++;
         ws.send(String(frames)); // ack: the page keeps at most a few frames ahead of ffmpeg (bounded memory at 4K)
-        if (frames % 60 === 0 || frames === total) {
+        if (o.progress) o.progress(frames);
+        else if (frames % 60 === 0 || frames === total) {
           const el = (performance.now() - t0) / 1000;
           process.stdout.write(`\r${frames}/${total} frames  ${(frames / el).toFixed(1)} fps  eta ${((total - frames) / (frames / el)).toFixed(0)}s   `);
         }
@@ -165,7 +178,51 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
   ff.stdin.end();
   await ff.exited;
   server.stop();
-  console.log(`\nwrote ${out} (${frames} frames in ${((performance.now() - t0) / 1000).toFixed(1)}s)`);
+  if (!o.progress) {
+    console.log(`\nwrote ${out} (${frames} frames in ${((performance.now() - t0) / 1000).toFixed(1)}s)`);
+    console.log(`sub-frames per frame (count:frames): ${hist(used)}`);
+  }
+  return used;
+}
+
+/**
+ * --jobs N: split [from, to) into N contiguous runs of whole frames, render each in its own headless
+ * Chrome (its own renderer process, so the CPU-side work — Canvas2D text, uploads, readback — runs on N
+ * cores at once while they share the GPU), encode each to a part file, then concatenate losslessly and
+ * mux the song. Frames are pure functions of t, so the joins are seamless.
+ */
+async function videoParallel(url: string, from: number, to: number, fps: number, out: string, jobs: number) {
+  const n0 = Math.round(from * fps), n1 = Math.round(to * fps), total = n1 - n0;
+  const dir = path.join(path.dirname(out), `.parts-${path.basename(out, path.extname(out))}`);
+  mkdirSync(dir, { recursive: true });
+  const counts = new Array(jobs).fill(0);
+  const t0 = performance.now();
+  const tick = () => {
+    const done = counts.reduce((a, b) => a + b, 0), el = (performance.now() - t0) / 1000;
+    process.stdout.write(`\r${done}/${total} frames  ${(done / el).toFixed(1)} fps  eta ${((total - done) / Math.max(1e-3, done / el)).toFixed(0)}s  [${counts.join(' ')}]   `);
+  };
+  const timer = setInterval(tick, 1000);
+  const parts = Array.from({ length: jobs }, (_, j) => path.join(dir, `part${String(j).padStart(2, '0')}.mp4`));
+  const used: Record<string, number> = {};
+  await Promise.all(parts.map(async (part, j) => {
+    const a = n0 + Math.round((total * j) / jobs), b = n0 + Math.round((total * (j + 1)) / jobs);
+    const { browser, page } = await openPage(url);
+    try {
+      const u = await video(page, a / fps, b / fps, fps, part, { audio: false, progress: (n) => (counts[j] = n) });
+      for (const [k, v] of Object.entries(u)) used[k] = (used[k] ?? 0) + v;
+    } finally { await browser.close(); }
+  }));
+  clearInterval(timer);
+  tick();
+  const list = path.join(dir, 'list.txt');
+  await Bun.write(list, parts.map((p) => `file '${path.basename(p)}'`).join('\n') + '\n');
+  const args = ['ffmpeg', '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list];
+  if (!flag('noaudio')) args.push('-ss', String(from), '-t', String(to - from), '-i', path.join(ROOT, 'audio/younggirla.mp3'), '-map', '0:v', '-map', '1:a', '-c:a', 'aac', '-b:a', '320k', '-shortest');
+  args.push('-c:v', 'copy', '-movflags', '+faststart', out);
+  const ff = Bun.spawn(args, { stdout: 'inherit', stderr: 'inherit' });
+  await ff.exited;
+  if (ff.exitCode === 0) rmSync(dir, { recursive: true, force: true });
+  console.log(`\nwrote ${out} (${total} frames in ${((performance.now() - t0) / 1000).toFixed(1)}s, ${jobs} jobs)`);
   console.log(`sub-frames per frame (count:frames): ${hist(used)}`);
 }
 
@@ -215,7 +272,11 @@ try {
     console.log(`frames ${r.n}  avg ${r.avg.toFixed(1)}ms  p50 ${r.p50.toFixed(1)}  p95 ${r.p95.toFixed(1)}  max ${r.max.toFixed(1)}  sub-frames ${hist(r.used)}`);
   } else if (mode === 'video') {
     const dur: number = await page.evaluate(() => (window as any).__mv.duration);
-    await video(page, +opt('from', '0')!, +opt('to', String(dur))!, +opt('fps', '60')!, path.resolve(opt('out', path.join(ROOT, 'out/younggirla.mp4'))!));
+    const from = +opt('from', '0')!, to = +opt('to', String(dur))!, fps = +opt('fps', '60')!;
+    const out = path.resolve(opt('out', path.join(ROOT, 'out/younggirla.mp4'))!);
+    const jobs = Math.max(1, Math.round(+opt('jobs', '1')!));
+    if (jobs > 1) await videoParallel(url, from, to, fps, out, jobs);
+    else await video(page, from, to, fps, out);
   }
   if (logs.length) console.error('BROWSER LOG:\n' + logs.slice(0, 40).join('\n'));
 } finally {
