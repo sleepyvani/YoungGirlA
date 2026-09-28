@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { AudioData } from './audio';
 import { Lyrics } from './lyrics';
-import { Compositor, FSPass, W, H, PW, PH, SCALE, SS_TAP, makeRT, clearRT } from './gl';
+import { Compositor, FSPass, Layer2D, W, H, PW, PH, SCALE, SS_TAP, makeRT, clearRT } from './gl';
 import { DEFAULT_POST, Post, SHOULDER_GLSL, type PostParams } from './post';
 import { Hud, type Caption } from './hud';
 import type { Frame, Scene, SceneClass, SceneCtx, PostOverrides } from './scene';
@@ -77,10 +77,13 @@ export class Engine {
   private xfade: FSPass;
   private accum: FSPass;
   private lastT = -1;
+  private renderSerial = 0;
   lastPost: PostParams = { ...DEFAULT_POST };
   errors: string[] = [];
   /** Suppress the HUD (captions, crop marks) — used when rendering plate thumbnails. */
   hudOff = false;
+  /** CPU-side time (ms) spent in each entry's scene.render, and in post + HUD (for `render.ts perf`). */
+  prof: Record<string, number> = {};
 
   timeline: TimelineEntry[] = [];
 
@@ -203,6 +206,7 @@ export class Engine {
    */
   render(t: number, dt = 1 / 60, toScreen = true, samples: number | AdaptiveSampling = 1, shutter = 0.5): number {
     const r = this.renderer;
+    Layer2D.frameKey = ++this.renderSerial; // 2D layers may be drawn once per output frame (Layer2D.textOnce)
     const seeked = this.lastT < 0 || t < this.lastT - 1e-6 || t - this.lastT > Math.max(0.25, dt * 4);
     this.lastT = t;
     let outTex: THREE.Texture;
@@ -266,9 +270,11 @@ export class Engine {
       outTex = this.avgRT.texture;
     }
     this.lastSamples = n;
+    const q0 = performance.now();
     const hudTex = this.hud.draw(t, { opacity: this.hudOff ? 0 : post.hud, frame: post.frame, readout: post.rec, paper: post.paper });
     this.post.render(r, outTex, hudTex, this.finalRT, post, t);
     this.lastPost = post;
+    this.prof['(post+hud)'] = (this.prof['(post+hud)'] ?? 0) + performance.now() - q0;
     if (toScreen) {
       this.blit.u.src!.value = this.finalRT.texture;
       this.blit.render(r, null);
@@ -333,12 +339,14 @@ export class Engine {
         }
       }
       let ov: PostOverrides | void = undefined;
+      const p0 = performance.now();
       try {
         ov = s.render(this.frameFor(e, t, sceneSeeked ? 0 : dt, sceneSeeked && !s.stateful, false, idx > 0 ? under : null, tin, tout), rt);
       } catch (err) {
         console.error(`scene ${e.id} render error`, err);
         clearRT(r, rt, [0.25, 0.0, 0.0]);
       }
+      this.prof[e.id] = (this.prof[e.id] ?? 0) + performance.now() - p0;
       rec.lastT = t;
       post = { ...post, ...(e.post ?? {}), ...(ov ?? {}) };
       if (idx > 0 && !s.handlesTransition && under) {

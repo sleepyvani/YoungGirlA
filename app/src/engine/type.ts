@@ -180,10 +180,19 @@ export function smart(s: string): string {
 /** Typewriter quotes back (mono UI text that shows a lyric as typed input or code). */
 export const plain = (s: string) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/…/g, '...');
 
+const measureCache = new Map<string, number>();
+/** Advance width of `text` (memoized: layouts are measured every sub-frame, and measureText is not cheap). */
 export function measure(text: string, family: string, size: number, tracking = 0) {
-  const c = mctx();
-  c.font = font(family, size);
-  return c.measureText(text).width + Math.max(0, Array.from(text).length - 1) * tracking;
+  const key = `${family}|${size}|${tracking}|${text}`;
+  let w = measureCache.get(key);
+  if (w === undefined) {
+    const c = mctx();
+    c.font = font(family, size);
+    w = c.measureText(text).width + Math.max(0, Array.from(text).length - 1) * tracking;
+    if (measureCache.size > 50000) measureCache.clear();
+    measureCache.set(key, w);
+  }
+  return w;
 }
 
 /** Largest font size (<= max) at which text fits in maxWidth. */

@@ -2,7 +2,8 @@
 // Offline renderer. Drives the app in headless Chrome (?export=1) and either
 //   stills:  bun scripts/render.ts stills --t 1.5,23,40.2 [--only id1,id2] [--out dir]
 //   sheet:   bun scripts/render.ts sheet --from 20 --to 35 [--n 12] [--cols 4] [--only ids] [--out file.png]   (or --times a,b,c | --cuts)
-//            --jobs N renders N segments in parallel Chromes and joins them; --nvenc encodes on an NVIDIA GPU
+//            --jobs N renders N segments in parallel Chromes and joins them; --nvenc encodes on an NVIDIA GPU;
+//            --text-once draws the 2D (text) layers once per frame instead of per sub-frame (faster, text unblurred)
 //   (--chrome <path> or $CHROME_PATH picks the browser; default: Chrome on macOS, playwright's Chromium elsewhere)
 //   perf:    bun scripts/render.ts perf --from 20 --to 25 [--only ids] [--samples 1] [--shutter 0.5]   (avg ms per frame incl. GPU sync and the export's pixel readback)
 //   video:   bun scripts/render.ts video [--from 0] [--to 242.04] [--fps 60] [--crf 16] [--x264 aq-mode=3] [--samples 1] [--shutter 0.5] [--out ../out/younggirla.mp4] [--noaudio]
@@ -79,7 +80,7 @@ async function openPage(url: string) {
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
   const only = opt('only');
-  await page.goto(`${url}/?export=1${only ? `&only=${only}` : ''}${SCALE !== 1 ? `&scale=${SCALE}` : ''}`);
+  await page.goto(`${url}/?export=1${only ? `&only=${only}` : ''}${SCALE !== 1 ? `&scale=${SCALE}` : ''}${flag('text-once') ? '&textonce=1' : ''}`);
   await page.waitForFunction(() => (window as any).__mv?.ready || (window as any).__mv?.error, null, { timeout: 120000 });
   const err = await page.evaluate(() => (window as any).__mv.error);
   if (err) throw new Error(`app failed to boot:\n${err}\n${logs.join('\n')}`);
@@ -259,17 +260,25 @@ try {
       const buf = new Uint8Array(P.width * P.height * 4);
       P.still(from);
       const used: Record<number, number> = {};
+      P.engine.prof = {};
+      let rb = 0;
       for (let t = from; t < to; t += 1 / 60) {
         const a = performance.now();
         const k = P.engine.render(t, 1 / 60, false, samples, shutter);
         used[k] = (used[k] ?? 0) + 1;
+        const r0 = performance.now();
         await P.engine.readPixelsAsync(buf);
+        rb += performance.now() - r0;
         ms.push(performance.now() - a);
       }
       ms.sort((a, b) => a - b);
-      return { n: ms.length, avg: ms.reduce((a, b) => a + b, 0) / ms.length, p50: ms[ms.length >> 1], p95: ms[Math.floor(ms.length * 0.95)], max: ms[ms.length - 1], used };
+      const prof: Record<string, number> = { ...P.engine.prof, '(readback)': rb };
+      for (const k in prof) prof[k] = prof[k] / ms.length;
+      return { n: ms.length, avg: ms.reduce((a, b) => a + b, 0) / ms.length, p50: ms[ms.length >> 1], p95: ms[Math.floor(ms.length * 0.95)], max: ms[ms.length - 1], used, prof };
     }, { from, to, samples: SAMPLES, shutter: +opt('shutter', '0.5')! });
     console.log(`frames ${r.n}  avg ${r.avg.toFixed(1)}ms  p50 ${r.p50.toFixed(1)}  p95 ${r.p95.toFixed(1)}  max ${r.max.toFixed(1)}  sub-frames ${hist(r.used)}`);
+    // CPU-side ms per frame (JS time; GPU work is asynchronous and shows up in the total and in readback)
+    console.log('  cpu ms/frame: ' + Object.entries(r.prof as Record<string, number>).map(([k, v]) => `${k} ${v.toFixed(1)}`).join('  '));
   } else if (mode === 'video') {
     const dur: number = await page.evaluate(() => (window as any).__mv.duration);
     const from = +opt('from', '0')!, to = +opt('to', String(dur))!, fps = +opt('fps', '60')!;

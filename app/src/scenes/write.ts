@@ -1,6 +1,6 @@
 // "Exhibit 3: the manuscript" (lines 6–7). A 原稿用紙 sheet on bone paper, written vertically, one
 // character per square at its aligned time, columns right to left, one phrase per column.
-//   曖昧に           — written, then smudged (blur and a sideways drift): vague
+//   曖昧に           — written, then smudged (a stacked-copy blur and a sideways drift): vague
 //   伝わりきらんないから — the tail is written faintly and fades out of its squares: not getting through
 //   君だけをさ信じて  — the red pen circles 君
 // The camera tracks the pen across the sheet with a slight tilt.
@@ -92,17 +92,27 @@ export default class Write extends Scene {
       if (wk > 0) {
         let a = 0.93;
         let dx = 0;
+        let blurR = 0;
         if (vague) {
           const v = smoothstep(s0 + 0.2, s0 + 0.9, t);
-          c.filter = `blur(${(v * 7).toFixed(2)}px)`;
+          blurR = v * 7;
           dx = v * 10;
           a *= 1 - 0.45 * v;
         }
         if (fading) a *= 0.55 * (1 - smoothstep(s0 + 0.35, s0 + 1.4, t)) + 0.05;
         // ink reveal: top-down wipe within the square
         if (wk < 1) { c.beginPath(); c.rect(x - SQ / 2, y - SQ / 2, SQ, SQ * wk); c.clip(); }
-        c.fillStyle = sung ? rgba('signal', a) : rgba('ink', a);
-        c.fillText(k.ch, x + dx, y + 2);
+        if (blurR > 0.3) {
+          // smudge: the glyph stacked around a ring (a cheap blur; the canvas blur filter costs ~100 ms a frame)
+          c.fillStyle = sung ? rgba('signal', a / 3.2) : rgba('ink', a / 3.2);
+          for (let q = 0; q < 8; q++) {
+            const ang = (q / 8) * Math.PI * 2;
+            c.fillText(k.ch, x + dx + Math.cos(ang) * blurR, y + 2 + Math.sin(ang) * blurR);
+          }
+        } else {
+          c.fillStyle = sung ? rgba('signal', a) : rgba('ink', a);
+          c.fillText(k.ch, x + dx, y + 2);
+        }
         if (vague) { c.globalAlpha = 0.35; c.fillText(k.ch, x - dx * 0.6, y + 2 + dx * 0.3); }
       }
       c.restore();

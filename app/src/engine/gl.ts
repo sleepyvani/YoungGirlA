@@ -185,15 +185,29 @@ export function scaleContext2D(c: CanvasRenderingContext2D, s: number) {
  * (see scaleContext2D), so drawing code works in logical px at every output scale.
  */
 export class Layer2D {
+  /**
+   * Draw each 2D layer once per output frame instead of once per motion-blur sub-frame (`?textonce`,
+   * render.ts --text-once): the engine sets `frameKey` for every Engine.render call; a layer cleared again
+   * under the same key keeps its canvas and texture, and hands out a context whose raster calls do
+   * nothing (state, transforms and measureText still work, so scene code runs unchanged). Faster; 2D
+   * layers then get no motion blur of their own.
+   */
+  static textOnce = typeof location !== 'undefined' && new URLSearchParams(location.search).has('textonce');
+  static frameKey = -1;
   canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
   texture: THREE.CanvasTexture;
+  private real: CanvasRenderingContext2D;
+  private mute: CanvasRenderingContext2D;
+  private key = -2;
+  private skip = false;
+  get ctx() { return this.skip ? this.mute : this.real; }
   /** `scale`: backing px per drawing px (default SCALE; pass 1 for a deliberately low-res layer, e.g. a soft glow). */
   constructor(public w = W, public h = H, scale = SCALE) {
     this.canvas = document.createElement('canvas');
     this.canvas.width = Math.round(w * scale);
     this.canvas.height = Math.round(h * scale);
-    this.ctx = scaleContext2D(this.canvas.getContext('2d')!, scale);
+    this.real = scaleContext2D(this.canvas.getContext('2d')!, scale);
+    this.mute = muted(this.real);
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.minFilter = THREE.LinearFilter;
@@ -201,7 +215,10 @@ export class Layer2D {
     this.texture.flipY = true;
   }
   clear(color?: string) {
-    const c = this.ctx;
+    if (Layer2D.textOnce && Layer2D.frameKey >= 0 && this.key === Layer2D.frameKey) { this.skip = true; return; }
+    this.skip = false;
+    this.key = Layer2D.frameKey;
+    const c = this.real;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
@@ -210,7 +227,20 @@ export class Layer2D {
     if (color) { c.fillStyle = color; c.fillRect(0, 0, this.w, this.h); }
     else c.clearRect(0, 0, this.w, this.h);
   }
-  upload() { this.texture.needsUpdate = true; return this.texture; }
+  upload() { if (!this.skip) this.texture.needsUpdate = true; return this.texture; }
+}
+
+const RASTER = new Set(['fillText', 'strokeText', 'fillRect', 'strokeRect', 'clearRect', 'fill', 'stroke', 'drawImage', 'putImageData']);
+/** A view of a 2D context whose raster calls are no-ops (everything else goes to the real context). */
+function muted(real: CanvasRenderingContext2D): CanvasRenderingContext2D {
+  return new Proxy(real, {
+    get(target, prop) {
+      if (typeof prop === 'string' && RASTER.has(prop)) return () => {};
+      const v = Reflect.get(target, prop, target);
+      return typeof v === 'function' ? v.bind(target) : v;
+    },
+    set(target, prop, value) { return Reflect.set(target, prop, value, target); },
+  });
 }
 
 /** Clear a render target to a linear colour. */

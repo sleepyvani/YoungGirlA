@@ -55,13 +55,18 @@ export interface HudState {
 export class Hud {
   layer = new Layer2D();
   private ink = false;
+  private empty = false;
   constructor(public duration: number, public captions: Caption[]) {}
 
   draw(t: number, st: HudState) {
     const L = this.layer;
+    // nothing to draw and already blank: keep the uploaded texture (saves a full-frame upload per frame)
+    const blank = st.opacity <= 0.001 || (st.frame <= 0.001 && st.readout <= 0.001 && !this.captions.some((k) => t >= k.start && t < k.end));
+    if (blank && this.empty) return L.texture;
     L.clear();
     const c = L.ctx;
-    if (st.opacity <= 0.001) return L.upload();
+    this.empty = blank;
+    if (blank) return L.upload();
     c.globalAlpha = st.opacity;
     this.ink = st.paper > 0.5;
     if (st.frame > 0.001) this.cropMarks(c, st.frame);
