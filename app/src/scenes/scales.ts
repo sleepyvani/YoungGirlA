@@ -1,11 +1,12 @@
-// "Exhibit 1: the balance" (lines 0–1). An engraved balance weighs lives.
-//   僕の命の価値だって — each sung word drops as a weight onto the left pan (mine)
-//   誰の命の価値だって — …and the same onto the right pan (anyone's): the beam comes back level
-//   時々さ 不公平に    — with nothing added, it tips anyway (unfair)
-//   裁かれる           — a seal 裁 slams on the beam: it swings hard the other way
-//   古くさい空に…      — the sky above is hatched in, line by line (engraving)
-//   理屈を連れて…      — deadpan measurements attach to the instrument (theory, 理屈)
-//   天秤に頼り切りと化しよう — the camera pushes into the fulcrum; the beam swings to its limits
+// "Exhibit 1: the balance" (lines 0–3). An engraved balance weighs lives.
+//   僕の命つったって — each sung word drops as a weight onto the left pan (mine)
+//   誰の命つったって — …and the same onto the right pan (anyone's): the beam comes back level
+//   時々 どき 公平に — with nothing added, it tips anyway (so much for 公平)
+//   裁かれる         — a seal 裁 slams on the beam: it swings hard the other way
+//   暗い空に…        — the sky above is hatched in, line by line (engraving)
+//   鬱を連れて…      — deadpan measurements attach to the instrument
+//   時々 雨 …        — rain: hairlines fall through the frame
+//   頼りぎりだ どうしよう — the camera pushes into the fulcrum; the beam swings to its limits
 import * as THREE from 'three';
 import { Scene, type Frame } from '../engine/scene';
 import { Layer2D, W, H } from '../engine/gl';
@@ -24,7 +25,7 @@ interface Weight { w: Word; side: -1 | 1; slot: number }
 export default class Scales extends Scene {
   ground = new Ground();
   layer = new Layer2D();
-  L0!: Line; L1!: Line;
+  L0!: Line; L1!: Line; L2!: Line; L3!: Line;
   weights: Weight[] = [];
   tilts: [number, number][] = []; // [time, delta angle]
   beats: number[] = [];
@@ -33,17 +34,16 @@ export default class Scales extends Scene {
 
   override init() {
     const { lyrics, audio } = this.ctx;
-    this.L0 = lyrics.lines[0]!;
-    this.L1 = lyrics.lines[1]!;
+    [this.L0, this.L1, this.L2, this.L3] = [0, 1, 2, 3].map((i) => lyrics.lines[i]!) as [Line, Line, Line, Line];
     const w0 = this.L0.words;
     // 僕の命の価値だって → left, 誰の命の価値だって → right
     w0.slice(0, 3).forEach((w, i) => this.weights.push({ w, side: -1, slot: i }));
     w0.slice(3, 6).forEach((w, i) => this.weights.push({ w, side: 1, slot: i }));
     for (const x of this.weights) this.tilts.push([x.w.start + 0.02, x.side * 0.075]);
     const at = (l: Line, i: number) => l.words[i]!.start;
-    this.tSabaku = at(this.L0, 8);
-    this.tilts.push([at(this.L0, 6), 0.03], [at(this.L0, 7), -0.24], [this.tSabaku, 0.46], [at(this.L0, 9), -0.14]);
-    this.tilts.push([at(this.L1, 0), -0.05], [at(this.L1, 3), 0.06], [at(this.L1, 6), -0.05], [at(this.L1, 7), -0.2], [at(this.L1, 8), 0.4], [at(this.L1, 9), -0.3]);
+    this.tSabaku = at(this.L1, 3);
+    this.tilts.push([at(this.L1, 0), 0.03], [at(this.L1, 1), -0.05], [at(this.L1, 2), -0.2], [this.tSabaku, 0.46], [at(this.L1, 4), -0.14]);
+    this.tilts.push([at(this.L2, 0), -0.05], [at(this.L2, 3), 0.06], [at(this.L3, 0), -0.05], [at(this.L3, 2), -0.2], [at(this.L3, 3), 0.4], [at(this.L3, 4), -0.3]);
     this.beats = beatsIn(audio, this.ctx.start - 1, this.ctx.end + 1);
     this.seal = sealCanvas(['裁'], 180, 'round', 23);
   }
@@ -59,8 +59,8 @@ export default class Scales extends Scene {
   override render(f: Frame, out: THREE.WebGLRenderTarget) {
     const { renderer } = this.ctx;
     const t = f.t;
-    const l1s = this.L1.words[0]!.start;
-    const tPush = this.L1.words[7]!.start;
+    const l1s = this.L2.words[0]!.start;
+    const tPush = this.L3.words[3]!.start;
     this.ground.render(renderer, out, { paper: 0, t });
 
     const L = this.layer; L.clear();
@@ -73,7 +73,7 @@ export default class Scales extends Scene {
     c.scale(zoom, zoom); c.translate(-960, -fy);
 
     // ---- the sky of 古くさい空 (hatch lines fill from the top on the beats of line 1)
-    const skyK = prog(t, l1s - 0.1, this.L1.words[2]!.start, ease.outCubic);
+    const skyK = prog(t, l1s - 0.1, this.L2.words[2]!.start, ease.outCubic);
     if (skyK > 0) {
       c.fillStyle = rgba('graphite', 0.55);
       const nLines = Math.floor(46 * skyK);
@@ -82,6 +82,18 @@ export default class Scales extends Scene {
         const wob = Math.sin(i * 1.7 + t * 0.6) * 20;
         const len = 1500 - i * 18 + wob;
         c.fillRect(960 - len / 2, y, len, i % 5 === 0 ? 1.4 : 0.9);
+      }
+    }
+
+    // 雨: rain hairlines from 雨 onward
+    const tAme = this.L3.words[1]!.start;
+    if (t >= tAme - 0.1) {
+      const rk = smoothstep(tAme - 0.1, tAme + 0.3, t);
+      c.fillStyle = rgba('ash', 0.35 * rk);
+      for (let i = 0; i < 90; i++) {
+        const x = hash(i, 51) * 2200 - 140;
+        const y = ((hash(i, 52) * 1300 + (t - tAme) * (900 + hash(i, 53) * 500)) % 1300) - 120;
+        c.fillRect(x - (y + 120) * 0.08, y, 1, 30 + hash(i, 54) * 40);
       }
     }
 
@@ -159,7 +171,7 @@ export default class Scales extends Scene {
     c.fillRect(-ARM, -9, ARM * 2, 1.5); c.fillRect(-ARM, 8, ARM * 2, 1.5);
     for (let x = -ARM; x < ARM; x += 7) c.fillRect(x, -8, 0.8, 16);
     // graduations (理屈)
-    const th = prog(t, this.L1.words[3]!.start, this.L1.words[3]!.start + 0.6);
+    const th = prog(t, this.L2.words[3]!.start, this.L2.words[3]!.start + 0.6);
     c.fillStyle = bone(0.6 * th);
     for (let i = -10; i <= 10; i++) c.fillRect(i * 48 - 0.5, 12, 1, i % 5 === 0 ? 16 : 8);
     c.restore();
@@ -181,7 +193,7 @@ export default class Scales extends Scene {
     label(c, '僕', endL.x, endL.y + CHAIN + 70, { size: 22, family: F.dot(), color: rgba('ash', 0.8), align: 'center', spacing: 0 });
     label(c, '誰', endR.x, endR.y + CHAIN + 70, { size: 22, family: F.dot(), color: rgba('ash', 0.8), align: 'center', spacing: 0 });
     // readouts (理屈を連れて: they switch on at 理屈を)
-    const rk = smoothstep(this.L1.words[3]!.start, this.L1.words[3]!.start + 0.2, t);
+    const rk = smoothstep(this.L2.words[3]!.start, this.L2.words[3]!.start + 0.2, t);
     if (rk > 0) {
       const deg = (a * 180) / Math.PI;
       c.globalAlpha = draw * rk;
@@ -196,10 +208,10 @@ export default class Scales extends Scene {
   }
 
   private drawLyric(c: CanvasRenderingContext2D, t: number) {
-    const l = t < this.L1.words[0]!.start - 0.35 ? this.L0 : this.L1;
+    const pair = t < this.L2.words[0]!.start - 0.35 ? [this.L0, this.L1] : [this.L2, this.L3];
     const fam = F.sans(900);
-    const size = Math.min(64, fitRun(l.words, fam, 1640, 64) * 1.9);
-    const rows = wrapWords(l.words, fam, size, 1640);
+    const size = 64;
+    const rows = pair.map((l) => l.words);
     const st = { family: fam, size, romajiSize: 16 };
     rows.forEach((row, i) => {
       const run = runH(row, st);

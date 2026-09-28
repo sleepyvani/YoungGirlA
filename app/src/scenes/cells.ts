@@ -1,10 +1,7 @@
-// "Exhibit 6: the cell" (line 6). A microscope field of cells (a jittered Voronoi, membranes as
-// hairlines, dark nuclei), all a function of t.
-//   細胞の        — the field comes into focus
-//   奥の          — the camera pushes deep into one nucleus
-//   声が          — rings go out from it on every vocal onset (the voice inside)
-//   追いつけない   — the nucleus drifts away and the camera chases it, always late
-//   けどね でもね でもね — pull back; the cells divide on each word
+// "Exhibit 8: which number" (lines 18–19). A microscope field of cells (a jittered Voronoi, membranes
+// as hairlines, dark nuclei), all a function of t.
+//   何番目でも ×2      — a reticle jumps from cell to cell on the beats, giving each a number
+//                       (whichever number); the cells divide on each 何番目でも
 //   僕が僕であるために — the cells whose nuclei fall inside 僕 turn vermilion: the field spells 僕
 import * as THREE from 'three';
 import { Scene, type Frame } from '../engine/scene';
@@ -12,7 +9,7 @@ import { FSPass, Layer2D, W, H, SS_TAP, SS_TAP_GLSL } from '../engine/gl';
 import { F, font } from '../engine/type';
 import { rgba } from '../engine/palette';
 import { Lyrics, type Line, type Word } from '../engine/lyrics';
-import { ease, keys, lerp, prog, smoothstep } from '../engine/util';
+import { ease, hash, keys, lerp, prog, smoothstep } from '../engine/util';
 import { beatsIn, drawRun, fitRun, label, pulseAt, runH } from './_kit';
 
 export default class Cells extends Scene {
@@ -82,10 +79,10 @@ export default class Cells extends Scene {
 
   override init() {
     const { lyrics, audio } = this.ctx;
-    this.L = lyrics.lines[6]!;
+    this.L = { ...lyrics.lines[18]!, words: [...lyrics.lines[18]!.words, ...lyrics.lines[19]!.words] };
     for (const w of this.L.words) if (!this.w[w.w]) this.w[w.w] = w;
     this.beats = beatsIn(audio, this.ctx.start - 1, this.ctx.end + 1);
-    this.vOn = audio.events('vocal', this.w['声が']!.start - 0.05, this.w['追いつけない']!.start + 6).map((e) => e[0]);
+    this.vOn = audio.events('vocal', this.ctx.start - 0.05, this.w['僕が']!.start).map((e) => e[0]);
     // the glyph mask: 僕, huge, centred
     const c = this.mask.ctx;
     this.mask.clear();
@@ -96,27 +93,15 @@ export default class Cells extends Scene {
     this.mask.upload();
   }
 
-  /** The chased nucleus's path (world px). */
-  private target(t: number) {
-    const t0 = this.w['追いつけない']!.start;
-    const u = Math.max(0, t - t0);
-    return { x: 3000 + 900 * Math.sin(u * 0.9) + 260 * u, y: 2000 + 520 * Math.sin(u * 1.7 + 0.5) };
-  }
-
   override render(f: Frame, out: THREE.WebGLRenderTarget) {
     const { renderer } = this.ctx;
     const t = f.t;
-    const W_ = this.w;
-    const tOku = W_['奥の']!.start, tKoe = W_['声が']!.start, tChase = W_['追いつけない']!.start, tKedo = W_['けどね']!.start;
-    const demo = this.L.words.filter((w) => w.w === 'でもね');
-    const tBoku = W_['僕が']!.start;
-    // camera: zoom and position
-    const zoom = keys(t, [[this.ctx.start, 0.45], [this.ctx.start + 1.2, 0.8, ease.outCubic], [tOku - 0.1, 0.9], [tOku + 0.6, 2.6, ease.inOutCubic], [tChase, 2.4], [tKedo - 0.2, 1.8], [tKedo + 0.5, 0.75, ease.outExpo], [tBoku, 0.8], [this.ctx.end, 0.86]]);
-    const lagged = this.target(t - 0.45), exact = this.target(t);
-    const chase = smoothstep(tChase - 0.2, tChase + 0.3, t) * (1 - smoothstep(tKedo - 0.2, tKedo + 0.5, t));
-    const base = { x: 3000 - 118 * 0.3 + (t - this.ctx.start) * 6, y: 2000 };
-    const cx = lerp(base.x, lagged.x, chase), cy = lerp(base.y, lagged.y, chase);
-    const split = 1 + 0.45 * demo.filter((w) => w.start <= t).length * 1 + (t >= tBoku ? 0.9 : 0);
+    const nan = this.L.words.filter((w) => w.w === '何番目でも');
+    const tBoku = this.w['僕が']!.start;
+    const zoom = keys(t, [[this.ctx.start, 2.2], [this.ctx.start + 0.5, 1.5, ease.outExpo], [tBoku - 0.1, 1.2], [tBoku + 0.5, 0.8, ease.outExpo], [this.ctx.end, 0.86]]);
+    const cx = 3000 + (t - this.ctx.start) * 14, cy = 2000;
+    const demo = nan;
+    const split = 1 + 0.45 * demo.filter((w) => w.start <= t).length + (t >= tBoku ? 0.9 : 0);
     const splitK = demo.length ? Math.max(...demo.map((w) => prog(t, w.start, w.start + 0.25, ease.outBack))) : 0;
     const u = this.pass.u;
     u.t!.value = t; u.zoom!.value = zoom;
@@ -132,31 +117,27 @@ export default class Cells extends Scene {
 
     const L = this.layer; L.clear();
     const c = L.ctx;
-    // the chased nucleus: a crosshair that is always late
-    if (chase > 0.01) {
-      const sx = (exact.x - cx) * zoom + 960, sy = (exact.y - cy) * zoom + 540;
+    // 何番目でも: a reticle jumps on each beat, numbering the cells
+    const bIdx = this.beats.filter((b) => b <= t).length;
+    if (t < tBoku - 0.05) {
+      const rx = 360 + hash(bIdx, 71) * 1200, ry = 220 + hash(bIdx, 72) * 560;
+      const num = String(1 + Math.floor(hash(bIdx, 73) * 9998)).padStart(4, '0');
       c.save();
-      c.globalAlpha = chase;
       c.strokeStyle = rgba('signal', 1); c.lineWidth = 1.5;
-      c.beginPath(); c.arc(sx, sy, 40, 0, Math.PI * 2); c.stroke();
-      c.beginPath(); c.moveTo(sx - 60, sy); c.lineTo(sx - 46, sy); c.moveTo(sx + 46, sy); c.lineTo(sx + 60, sy); c.moveTo(sx, sy - 60); c.lineTo(sx, sy - 46); c.moveTo(sx, sy + 46); c.lineTo(sx, sy + 60); c.stroke();
-      c.strokeStyle = rgba('bone', 0.6);
-      c.strokeRect(960 - 70, 540 - 70, 140, 140);
-      label(c, `LAG ${Math.hypot(sx - 960, sy - 540).toFixed(0)} px`, 960 + 80, 540 - 76, { size: 13, color: rgba('bone', 0.8) });
+      c.beginPath(); c.arc(rx, ry, 44, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.moveTo(rx - 64, ry); c.lineTo(rx - 50, ry); c.moveTo(rx + 50, ry); c.lineTo(rx + 64, ry); c.moveTo(rx, ry - 64); c.lineTo(rx, ry - 50); c.moveTo(rx, ry + 50); c.lineTo(rx, ry + 64); c.stroke();
+      label(c, `No. ${num}`, rx + 56, ry - 52, { size: 18, color: rgba('bone', 0.95), family: F.mono(500) });
       c.restore();
-    }
-    // the current word, large, in the focused cell (words 1..6), mincho
-    const cur = this.L.words.filter((w) => w.start - 0.1 <= t).pop();
-    if (cur && t < tBoku && t >= tOku - 0.1) {
-      const a = smoothstep(cur.start - 0.1, cur.start + 0.05, t);
-      c.save();
-      c.globalAlpha = a;
-      c.font = font(F.mincho(700), 120);
-      c.textAlign = 'center'; c.textBaseline = 'middle';
-      const p = Lyrics.wordProgress(cur, t);
-      c.fillStyle = p < 1 ? rgba('signal', 1) : rgba('bone', 0.95);
-      c.fillText(cur.w, 960, 330);
-      c.restore();
+      // the word, large, centre-top
+      const cur = nan.filter((w) => w.start - 0.1 <= t).pop();
+      if (cur) {
+        c.save();
+        c.font = font(F.mincho(700), 110); c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillStyle = t < cur.end ? rgba('signal', 1) : rgba('bone', 0.95);
+        c.fillText('何番目でも', 960, 170);
+        c.restore();
+      }
+      label(c, `${bIdx.toString().padStart(4, '0')} / ????`, W - 110, 124, { size: 16, family: F.mono(400), color: rgba('bone', 0.8), align: 'right' });
     }
     // karaoke line, bottom
     const fam = F.sans(900);
@@ -164,7 +145,7 @@ export default class Cells extends Scene {
     const st = { family: fam, size, romajiSize: 15 };
     const run = runH(this.L.words, st);
     drawRun(c, run, 960 - run.width / 2, 990, t, st);
-    label(c, 'EXHIBIT 6 · 細胞', 110, 96, { size: 13, color: rgba('ash', 0.6) });
+    label(c, 'EXHIBIT 8 · 細胞', 110, 96, { size: 13, color: rgba('ash', 0.6) });
     label(c, `×${(zoom * 400).toFixed(0)}`, W - 110, 96, { size: 13, color: rgba('ash', 0.6), align: 'right', family: F.mono(400) });
     if (t >= tBoku) label(c, '同定  僕', W - 110, 124, { size: 16, family: F.dot(), color: rgba('signal', 1), align: 'right', spacing: 2 });
     this.ctx.comp.draw(renderer, L.upload(), out);

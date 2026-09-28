@@ -1,5 +1,5 @@
-// "Exhibit 7: scraps" (line 7). On bone paper, torn scraps fly in and are pinned into a collage.
-//   ちぎれ           — a scrap arrives torn: its two halves drift apart
+// "Exhibit 9: scraps" (lines 20–21). On bone paper, torn scraps fly in and are pinned into a collage.
+//   ちぎり           — a scrap arrives torn: its two halves drift apart
 //   集め 持ってきた   — scraps converge on the beats (fragments of the earlier exhibits: manuscript
 //                     squares, mosaic, a seal, the balance's dial) and settle
 //   あの日の間違いを  — the red pen crosses out the scrap that says 間違い
@@ -46,12 +46,12 @@ export default class Torn extends Scene {
 
   override init() {
     const { lyrics, audio } = this.ctx;
-    this.L = lyrics.lines[7]!;
+    this.L = { ...lyrics.lines[20]!, words: [...lyrics.lines[20]!.words, ...lyrics.lines[21]!.words] };
     const ws = this.L.words;
     this.machi = ws.find((w) => w.w === '間違いを')!;
     this.nomi = ws.find((w) => w.w === '飲み込むのが')!;
     this.kuru = ws.find((w) => w.w === '苦しくて')!;
-    this.chigire = ws.filter((w) => w.w === 'ちぎれ');
+    this.chigire = ws.filter((w) => w.w === 'ちぎり');
     this.beats = beatsIn(audio, this.ctx.start - 1, this.ctx.end + 1);
     this.seal = sealCanvas(['少女', 'Ａ'], 160, 'square', 31);
     const r = mulberry32(99);
@@ -101,7 +101,7 @@ export default class Torn extends Scene {
       rot += crumple * (hash(s.seed, 2) - 0.5) * 1.2;
       x += (hash(s.seed, fi) - 0.5) * 10 * shudder; y += (hash(s.seed, fi + 7) - 0.5) * 10 * shudder;
       // ちぎれ: the scrap is in two halves that separate
-      const tearW = s.w && s.w.w === 'ちぎれ' ? prog(t, s.w.start, s.w.start + 0.4, ease.outExpo) : 0;
+      const tearW = s.w && s.w.w === 'ちぎり' ? prog(t, s.w.start, s.w.start + 0.4, ease.outExpo) : 0;
       this.drawScrap(c, s, x, y, rot, t, tearW);
     }
     // the red pen on 間違い
@@ -120,7 +120,7 @@ export default class Torn extends Scene {
     const st = { family: fam, size, romajiSize: 14 };
     const run = runH(this.L.words, st);
     drawRun(c, run, 960 - run.width / 2, 1008, t, st);
-    label(c, 'EXHIBIT 7 · 断片', 110, 96, { size: 13, color: rgba('ink', 0.55) });
+    label(c, 'EXHIBIT 9 · 断片', 110, 96, { size: 13, color: rgba('ink', 0.55) });
     label(c, `${this.scraps.filter((s) => s.t0 <= t).length} / ${this.scraps.length} PIECES`, W - 110, 96, { size: 13, color: rgba('ink', 0.55), align: 'right' });
     this.ctx.comp.draw(renderer, L.upload(), out);
     const kick = pulseAt(this.beats, t, 0.08);

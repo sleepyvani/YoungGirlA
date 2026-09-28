@@ -1,6 +1,7 @@
-// "Exhibit 12: cold" (line 13, first half). Bone paper; eleven 寒い fill a grid one per word, every
-// one shivering (per-frame jitter that grows), each lighter in weight than the one before: the type
-// loses its body as it gets colder. Frost creeps in from the corners in hairlines; a thermometer reads down.
+// "Cold" (the 寒い choruses: params.lines = [11, 12, 13] and [39, 40, 41]). Bone paper; fourteen 寒い
+// fill a grid one per word, every one shivering (per-frame jitter that grows), each lighter in weight
+// than the one before: the type loses its body as it gets colder. The line's tail (いい 寄らないで /
+// お願いだから) is set large underneath. Frost creeps in from the corners; a thermometer reads down.
 import * as THREE from 'three';
 import { Scene, type Frame } from '../engine/scene';
 import { Layer2D, W, H } from '../engine/gl';
@@ -15,13 +16,20 @@ export default class Samui extends Scene {
   layer = new Layer2D();
   L!: Line;
   sw: Word[] = [];
+  tail: Word[] = [];
+  all: Word[] = [];
+  second = false;
   beats: number[] = [];
   frost: { x: number; y: number; a: number; len: number; t0: number }[] = [];
 
   override init() {
     const { lyrics, audio } = this.ctx;
-    this.L = lyrics.lines[13]!;
-    this.sw = this.L.words.filter((w) => w.w === '寒い');
+    const ls: number[] = this.ctx.params.lines ?? [11, 12, 13];
+    this.second = ls[0]! > 20;
+    this.L = lyrics.lines[ls[0]!]!;
+    this.all = ls.flatMap((i) => lyrics.lines[i]!.words);
+    this.sw = this.all.filter((w) => w.w === '寒い');
+    this.tail = this.all.filter((w) => w.w !== '寒い');
     this.beats = beatsIn(audio, this.ctx.start - 1, this.ctx.end + 1);
     // frost: branching hairlines from the four corners, each appearing at a time through the plate
     const T0 = this.sw[0]!.start, T1 = this.sw[this.sw.length - 1]!.end;
@@ -54,39 +62,45 @@ export default class Samui extends Scene {
       c.lineTo(fr.x + (ex - fr.x) * 0.5 + Math.cos(fr.a + 0.7) * fr.len * 0.35 * k, fr.y + (ey - fr.y) * 0.5 + Math.sin(fr.a + 0.7) * fr.len * 0.35 * k);
       c.stroke();
     }
-    // the grid of 寒い: 4 × 3, the eleventh in the centre of the last row... the last one is big
+    // the grid of 寒い: 5 + 5 + 4
     const n = this.sw.length;
-    const weights = [900, 900, 900, 700, 700, 700, 500, 500, 500, 300, 300];
+    const weights = [900, 900, 900, 900, 700, 700, 700, 700, 500, 500, 500, 300, 300, 300];
+    const tailT = this.tail[0]?.start ?? this.ctx.end;
     this.sw.forEach((w, i) => {
       if (t < w.start - 0.04) return;
-      const last = i === n - 1;
-      const col = i % 4, row = Math.floor(i / 4);
-      const x = last ? 960 : 330 + col * 420, y = last ? 560 : 300 + row * 270;
+      const col = i % 5, row = Math.floor(i / 5);
+      const x = 300 + col * 330 + (row === 2 ? 165 : 0), y = 250 + row * 200;
       const colder = this.sw.filter((x) => x.start <= t).length / n;
-      const j = (3 + 16 * colder) * (last ? 1.4 : 1);
+      const j = 3 + 16 * colder;
       const jx = (hash(i, fi) - 0.5) * j, jy = (hash(i, fi + 11) - 0.5) * j * 0.6;
-      const a = smoothstep(w.start - 0.04, w.start + 0.02, t) * (last ? 1 : 1 - 0.55 * smoothstep(this.sw[n - 1]!.start - 0.1, this.sw[n - 1]!.start + 0.2, t));
+      const a = smoothstep(w.start - 0.04, w.start + 0.02, t) * (1 - 0.5 * smoothstep(tailT - 0.1, tailT + 0.3, t));
       c.save();
       c.globalAlpha = a;
-      c.font = font(F.sans(weights[i] ?? 300), last ? 330 : 170);
+      c.font = font(F.sans(weights[i] ?? 300), 150);
       c.textAlign = 'center'; c.textBaseline = 'middle';
       const hot = t >= w.start && t < w.end;
       c.fillStyle = hot ? rgba('signal', 1) : rgba('ink', 0.88);
       c.fillText(w.w, x + jx, y + jy);
       c.restore();
     });
+    // the tail, large, shivering
+    if (this.tail.length) {
+      const st = { family: F.mincho(700), size: 96, gap: 40, romajiSize: 18, unsung: rgba('ink', 0.15), sung: rgba('ink', 0.9), romajiColor: rgba('ink', 0.5), ghost: 0.35 };
+      const run = runH(this.tail, st);
+      c.save();
+      c.translate((hash(1, fi) - 0.5) * 6, (hash(2, fi) - 0.5) * 4);
+      drawRun(c, run, 960 - run.width / 2, 900, t, st);
+      c.restore();
+    }
     // thermometer
     const k = this.sw.filter((x) => x.start <= t).length;
-    const temp = -k * 1.0 - 0.1 * Math.sin(t * 7);
+    const temp = -k * 1.0 - (this.second ? 14 : 0) - 0.1 * Math.sin(t * 7);
     label(c, '気温', W - 150, 72, { size: 16, family: F.dot(), color: rgba('ink', 0.55), align: 'right', spacing: 2 });
     c.save();
     c.font = font(F.mono(400), 48); c.fillStyle = rgba('ink', 0.88); c.textAlign = 'right';
     c.fillText(`${temp < 0 ? '−' : ''}${Math.abs(temp).toFixed(1)}°C`, W - 150, 128);
     c.restore();
-    label(c, 'EXHIBIT 12 · 寒い', 110, 96, { size: 13, color: rgba('ink', 0.5) });
-    const st = { family: F.sans(900), size: 40, romajiSize: 13, unsung: rgba('ink', 0.2), sung: rgba('ink', 0.9), romajiColor: rgba('ink', 0.5) };
-    const run = runH(this.sw, st);
-    drawRun(c, run, 960 - run.width / 2, 1010, t, st);
+    label(c, this.second ? 'EXHIBIT 13 · 寒い (再)' : 'EXHIBIT 6 · 寒い', 110, 96, { size: 13, color: rgba('ink', 0.5) });
     this.ctx.comp.draw(renderer, L.upload(), out);
     const kick = pulseAt(this.beats, t, 0.08);
     return { bloom: 0.2, vignette: 0.3, paper: 1, zoom: 1 + kick * 0.008, grain: 0.07 };

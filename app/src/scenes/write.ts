@@ -1,8 +1,8 @@
-// "Exhibit 3: the manuscript" (line 3). A 原稿用紙 sheet on bone paper, written vertically, one
+// "Exhibit 3: the manuscript" (lines 6–7). A 原稿用紙 sheet on bone paper, written vertically, one
 // character per square at its aligned time, columns right to left, one phrase per column.
 //   曖昧に           — written, then smudged (blur and a sideways drift): vague
-//   伝わりきらないから — the tail is written faintly and fades out of its squares: not getting through
-//   君だけを信じてさ  — the red pen circles 君
+//   伝わりきらんないから — the tail is written faintly and fades out of its squares: not getting through
+//   君だけをさ信じて  — the red pen circles 君
 // The camera tracks the pen across the sheet with a slight tilt.
 import * as THREE from 'three';
 import { Scene, type Frame } from '../engine/scene';
@@ -31,12 +31,12 @@ export default class Write extends Scene {
 
   override init() {
     const { lyrics, audio } = this.ctx;
-    this.L = lyrics.lines[3]!;
-    // phrases → columns: break after 書く, 書く, から
+    this.L = { ...lyrics.lines[6]!, words: [...lyrics.lines[6]!.words, ...lyrics.lines[7]!.words] };
+    // phrases → columns: break after each 曖昧に and after から
     let col = 0, row = 0;
     for (const w of this.L.words) {
       Array.from(w.w).forEach((ch, i) => { this.cells.push({ ch, w, i, col, row }); row++; });
-      if (w.w === '書く' || w.w === 'きらないから') { col++; row = 0; }
+      if (w.w === '曖昧に' || w.w === 'きらんないから') { col++; row = 0; }
     }
     this.kimi = this.L.words.find((w) => w.w.startsWith('君'))!;
     this.beats = beatsIn(audio, this.ctx.start - 1, this.ctx.end + 1);
@@ -83,7 +83,7 @@ export default class Write extends Scene {
       const wk = prog(t, s0, s0 + 0.14, ease.outCubic);
       const x = this.colX(k.col), y = TOP + k.row * SQ + SQ / 2;
       const vague = k.w.w === '曖昧に';
-      const fading = k.w.w === 'きらないから';
+      const fading = k.w.w === 'きらんないから';
       const sung = t >= k.w.start && t < k.w.end + 0.1;
       c.save();
       c.font = font(F.mincho(700), SQ * 0.74);

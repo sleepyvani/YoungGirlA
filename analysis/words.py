@@ -10,47 +10,66 @@ import re
 
 import common
 
-X = lambda jp, ro, n: [(jp, ro)] * n  # noqa: E731  (repeated words: 軽い軽い…)
+X = lambda jp, ro, n: [(jp, ro)] * n  # noqa: E731  (repeated words: 寒い寒い…)
+R5 = lambda jp, ro: X(jp, ro, 5)  # noqa: E731
+BOKU = [("僕が", "boku ga"), ("僕で", "boku de"), ("あるために", "aru tame ni")]
+KUCHIRU = [("朽ちるまでの", "kuchiru made no"), ("愛憎を", "aizou wo")] * 2
+NOMIKOMU = [("飲み込む", "nomikomu"), ("君", "kimi"), ("簡単に", "kantan ni"), ("微笑む", "hohoemu"), ("君", "kimi"), ("どうして", "dou shite")]
 
 WORDS = [
-    [("僕の", "boku no"), ("命の", "inochi no"), ("価値だって", "kachi datte"), ("誰の", "dare no"), ("命の", "inochi no"),
-     ("価値だって", "kachi datte"), ("時々さ", "tokidoki sa"), ("不公平に", "fukouhei ni"), ("裁かれる", "sabakareru"),
-     ("もんなんでしょう", "mon nan deshou")],
-    [("古くさい", "furukusai"), ("空に", "sora ni"), ("やってきた", "yattekita"), ("理屈を", "rikutsu wo"), ("連れて", "tsurete"),
-     ("やってきた", "yattekita"), ("時々さ", "tokidoki sa"), ("天秤に", "tenbin ni"), ("頼り切りと", "tayorikiri to"), ("化しよう", "kashiyou")],
-    [("口までの", "kuchi made no"), ("愛", "ai"), ("口までの", "kuchi made no"), ("愛", "ai"), ("飲み込む", "nomikomu"),
-     ("気に", "ki ni"), ("簡単に", "kantan ni")],
-    [("落として", "otoshite"), ("言葉を", "kotoba wo"), ("書く", "kaku"), ("曖昧に", "aimai ni"), ("言葉を", "kotoba wo"), ("書く", "kaku"),
-     ("曖昧に", "aimai ni"), ("伝わり", "tsutawari"), ("きらないから", "kiranai kara"), ("君だけを", "kimi dake wo"), ("信じてさ", "shinjite sa")],
-    [("連れてきた", "tsuretekita"), ("夢の", "yume no"), ("粒を", "tsubu wo"), ("ちょっと", "chotto"), ("間違えながら", "machigaenagara"),
-     ("パラパッパッパラパ", "parappapparapa"), ("明日に", "asu ni"), ("架けるのさ", "kakeru no sa")],
-    [("足りないね", "tarinai ne"), *X("軽い", "karui", 6)],
-    [("細胞の", "saibou no"), ("奥の", "oku no"), ("声が", "koe ga"), ("追いつけない", "oitsukenai"), ("けどね", "kedo ne"),
-     ("でもね", "demo ne"), ("でもね", "demo ne"), ("僕が", "boku ga"), ("僕で", "boku de"), ("あるために", "aru tame ni")],
-    [("ちぎれ", "chigire"), ("集め", "atsume"), ("持ってきた", "mottekita"), ("ちぎれ", "chigire"), ("集め", "atsume"), ("持ってきた", "mottekita"),
-     ("あの日の", "ano hi no"), ("間違いを", "machi gai wo"), ("飲み込むのが", "nomikomu no ga"), ("苦しくて", "kurushikute")],
-    [("口までの", "kuchi made no"), ("愛", "ai"), ("口までの", "kuchi made no"), ("愛", "ai"), ("飲み込む", "nomikomu"),
-     ("気に", "ki ni"), ("簡単に", "kantan ni"), ("言葉の", "kotoba no"), ("向きに", "muki ni"), ("変として", "hen to shite")],
-    [("心も", "kokoro mo"), ("なく", "naku"), ("響かせたから", "hibikase ta kara"), ("愛を", "ai wo"), ("追いかけてた", "oikaketeta")],
-    [("足りないね", "tarinai ne"), *X("早い", "hayai", 5), ("追いつけないよ", "oitsukenai yo"), ("素っ気なく", "sokkenaku"),
-     ("残した", "nokoshita"), ("思いが", "omoi ga"), *X("憎い", "nikui", 3)],
-    [*X("憎い", "nikui", 5), ("足りないの", "tarinai no"), ("明日も", "asu mo"), ("夢を", "yume wo"), ("見てたい", "mitetai"),
-     *X("怖い", "kowai", 5)],
-    [*X("可愛い", "kawaii", 8), ("嘘", "uso"), ("来ないで", "konaide"), ("手に", "te ni"), ("返すんだ", "kaesunda")],
-    [*X("寒い", "samui", 11), ("だからね", "dakarane"), ("でもね", "demo ne"), ("でもね", "demo ne"), ("僕が", "boku ga"),
-     ("僕で", "boku de"), ("あるために", "aru tame ni")],
+    # verse 1
+    [("僕の", "boku no"), ("命", "inochi"), ("つったって", "tsuttatte"), ("誰の", "dare no"), ("命", "inochi"), ("つったって", "tsuttatte")],
+    [("時々", "tokidoki"), ("どき", "doki"), ("公平に", "kouhei ni"), ("裁かれる", "sabakareru"), ("もんなんでしょ", "mon nan desho")],
+    [("暗い", "kurai"), ("空に", "sora ni"), ("やってきた", "yattekita"), ("鬱を", "utsu wo"), ("連れて", "tsurete"), ("やってきた", "yattekita")],
+    [("時々", "tokidoki"), ("雨", "ame"), ("そうけいに", "soukei ni"), ("頼りぎりだ", "tayorigiri da"), ("どうしよう", "dou shiyou")],
+    KUCHIRU,
+    NOMIKOMU,
+    [("言葉を", "kotoba wo"), ("書く", "kaku"), ("曖昧に", "aimai ni")] * 2,
+    [("伝わり", "tsutawari"), ("きらんないから", "kirannai kara"), ("君だけをさ", "kimi dake wo sa"), ("信じて", "shinjite")],
+    # pre-chorus 1
+    [("捨ててきた", "sutete kita"), ("夢を", "yume wo"), ("集めて", "atsumete")],
+    [("ちょっと", "chotto"), ("ちょっと", "chotto"), ("間違えたから", "machigaeta kara")],
+    # chorus 1
+    [("ああ", "aa"), ("時に", "toki ni"), ("時に", "toki ni"), ("つまずいたって", "tsumazuita tte")],
+    R5("寒い", "samui"), R5("寒い", "samui"), [*X("寒い", "samui", 4), ("いい", "ii"), ("寄らないで", "yoranaide")],
+    [("ああ", "aa"), ("君の", "kimi no"), ("君の", "kimi no"), ("君の", "kimi no"), ("声が", "koe ga")],
+    R5("遠い", "tooi"), R5("遠い", "tooi"), [*X("遠い", "tooi", 4), ("傷つけないで", "kizutsuke naide")],
+    # post-chorus 1
+    [("何番目でも", "nanbanme demo")] * 2,
+    BOKU,
+    # verse 2
+    [("ちぎり", "chigiri"), ("集め", "atsume"), ("持ってきた", "mottekita"), ("ちぎり", "chigiri"), ("集め", "atsume"), ("持ってきた", "motte kita")],
+    [("あの日の", "ano hi no"), ("間違いを", "machigai wo"), ("飲み込むのが", "nomikomu no ga"), ("苦しくて", "kuru shikute")],
+    KUCHIRU,
+    NOMIKOMU,
+    # pre-chorus 2
+    [("子供騙しの", "kodomo damashi no"), ("花", "hana"), ("二つ", "futatsu")],
+    [("きっと", "kitto"), ("きっと", "kitto"), ("諦めたから", "akirameta kara")],
+    # chorus 2
+    [("ああ", "aa"), ("遠い", "tooi"), ("夢を", "yume wo"), ("追いかけてさ", "oikakete sa")],
+    R5("早い", "hayai"), R5("早い", "hayai"), [*X("早い", "hayai", 4), ("追いつけないよ", "oitsukenai yo")],
+    [("すてきれず", "sutekirezu"), ("残した", "nokoshita"), ("思いが", "omoi ga")],
+    R5("憎い", "nikui"), R5("憎い", "nikui"), [*X("憎い", "nikui", 4), ("許されないの", "yurusare nai no")],
+    # outro
+    [("ああ", "aa"), ("夢を", "yume wo"), ("夢を", "yume wo"), ("見てたはずが", "miteta hazu ga")],
+    R5("怖い", "kowai"), R5("怖い", "kowai"), [*X("怖い", "kowai", 4), ("近づかないで", "chikazuka nai de")],
+    [("愛", "ai"), ("言葉を", "kotoba o"), ("繰り返すだけ", "kuri kaesu dake")],
+    R5("寒い", "samui"), R5("寒い", "samui"), [*X("寒い", "samui", 4), ("お願いだから", "onegai dakara")],
+    [("何番目でも", "nanbanme demo")] * 2,
+    BOKU,
 ]
 
 
 def source_lines():
-    """[(start, end, jp, romaji)] parsed from lyrics/lyrics.src.js."""
-    src = open(os.path.join(common.ROOT, "lyrics", "lyrics.src.js"), encoding="utf8").read()
-    out = []
-    for m in re.finditer(r'\[\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*"(.*?)"\s*\]', src):
-        s, e, txt = float(m.group(1)), float(m.group(2)), m.group(3)
+    """[(start, end, jp, romaji)] from lyrics/lyrics.src.js (evaluated with node)."""
+    import subprocess
+    src = os.path.join(common.ROOT, "lyrics", "lyrics.src.js")
+    out = subprocess.run(["node", "-e", f"console.log(JSON.stringify(require({json.dumps(src)}).LY))"], check=True, capture_output=True, text=True).stdout
+    lines = []
+    for s, e, txt in json.loads(out):
         jp, ro = re.match(r"(.*?)\s*\((.*)\)\s*$", txt).groups()
-        out.append((s, e, jp.strip(), ro.strip()))
-    return out
+        lines.append((float(s), float(e), jp.strip(), ro.strip()))
+    return lines
 
 
 def load():

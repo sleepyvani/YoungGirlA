@@ -15,7 +15,8 @@ The engine (renderer core, post-processing, adaptive motion blur, offline render
 ## Layout
 
 - `audio/younggirla.mp3` — the song.
-- `lyrics/lyrics.src.js` — line-level lyrics with approximate windows (as supplied).
+- `lyrics/lyrics.src.js` — the lyrics, one line per phrase: the supplied romaji and its Japanese transcription, with
+  a generous search window per section (no timings needed: the aligner finds them).
 - `analysis/` — Python tools that produced the timing data:
   - `separate.py` — vocal stem (UVR-MDX-NET-Voc_FT, ONNX, numpy re-implementation of MDX inference).
   - `ctc_emissions.py` — frame-wise CTC log-probs of the vocal stem (SenseVoice-Small, sherpa-onnx int8 export).
@@ -26,8 +27,8 @@ The engine (renderer core, post-processing, adaptive motion blur, offline render
   - `make_fonts.py` — subset static instances of Noto Sans JP / Noto Serif JP / DotGothic16.
 - `app/` — the renderer (TypeScript + three.js, bun + Vite).
   - `src/engine/` — renderer core (from pdoom-video, adapted: Japanese fonts, romaji words, record HUD).
-  - `src/scenes/` — one module per plate: `open`, `scales`, `mouth` (×2), `write`, `dream`, `karui`,
-    `cells`, `torn`, `echo`, `hayai`, `kowai`, `kawaii`, `samui`, `boku`, `outro`, plus the shared `_kit`.
+  - `src/scenes/` — one module per plate: `open`, `scales`, `mouth` (×2), `write`, `dream`, `trip`, `samui` (×2),
+    `echo`, `cells`, `torn`, `hana`, `chase`, `hayai`, `kowai`, `loop`, `boku`, `outro`, plus the shared `_kit`.
   - `src/timeline.ts` — the edit: scene windows anchored to lyric lines and snapped to the beat grid.
   - `scripts/render.ts` — offline renderer (headless Chrome → raw frames over WebSocket → ffmpeg).
 
@@ -77,9 +78,9 @@ python separate.py && python ctc_emissions.py && python align.py --report && pyt
 To change the lyrics: edit `lyrics/lyrics.src.js` and the segmentation in `analysis/words.py`, then
 rerun `align.py`, `analyze.py` and `make_fonts.py`.
 
-**Note on the lyrics:** the supplied lyric sheet covers part of what is sung (the vocal runs almost
-continuously from 22 s to 201 s). The aligner places each supplied line within its window and skips
-unlisted singing; where the sheet differs from the recording, those words are placed approximately.
+**Note on the lyrics:** only romaji was available; the Japanese on screen is a transcription of it
+(kanji only where the word is unambiguous, kana elsewhere). Correct any line in `lyrics/lyrics.src.js`
+and `analysis/words.py` and rerun the aligner.
 
 ## Credits
 

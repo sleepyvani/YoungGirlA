@@ -1,10 +1,10 @@
-// "Exhibit 2: love, up to the mouth" (line 2; reprise on line 8, params.n = 2).
+// "Exhibit 2: love and hate, until it rots" (lines 4–5; reprise on lines 22–23, params.n = 2).
 // A mouth the width of the frame, drawn in vermilion hairlines; it opens with the vocal envelope.
-//   口までの 愛   — 愛 rises out of the mouth, huge, and stops there (love only as far as the mouth)
-//   飲み込む      — it is swallowed back: sucked down behind the lower lip, the mouth snaps shut
-//   気に簡単に    — as easily as that
+//   朽ちるまでの 愛憎を — 愛憎 rises out of the mouth, huge, and stops there
+//   飲み込む君          — it is swallowed back: sucked down behind the lower lip, the mouth snaps shut
+//   簡単に 微笑む君     — as easily as that; the mouth smiles
 // The reprise (n = 2) is on bone paper, the lips built from black redaction bars, and on
-//   言葉の向きに変として — the whole lyric turns its direction: the line rotates into a vertical column.
+//   どうして — the whole lyric turns its direction: the line rotates into a vertical column.
 import * as THREE from 'three';
 import { Scene, type Frame } from '../engine/scene';
 import { Layer2D, W, H } from '../engine/gl';
@@ -28,10 +28,11 @@ export default class Mouth extends Scene {
 
   override init() {
     const { lyrics, audio } = this.ctx;
-    this.L = lyrics.lines[this.ctx.params.line ?? 2]!;
-    this.ai = this.L.words.filter((w) => w.w === '愛');
+    const ls: number[] = this.ctx.params.lines ?? [4, 5];
+    this.L = { ...lyrics.lines[ls[0]!]!, words: ls.flatMap((i) => lyrics.lines[i]!.words) };
+    this.ai = this.L.words.filter((w) => w.w === '愛憎を');
     this.nomu = this.L.words.find((w) => w.w === '飲み込む')!;
-    this.turn = this.L.words.find((w) => w.w === '向きに') ?? null;
+    this.turn = this.ctx.params.n === 2 ? this.L.words.find((w) => w.w === 'どうして') ?? null : null;
     this.beats = beatsIn(audio, this.ctx.start - 1, this.ctx.end + 1);
     this.paper = this.ctx.params.n === 2;
   }
@@ -171,11 +172,11 @@ export default class Mouth extends Scene {
     c.clip();
     c.translate(MX, y);
     c.scale(s, s);
-    c.font = font(F.mincho(700), 360);
+    c.font = font(F.mincho(700), 300);
     c.textAlign = 'center'; c.textBaseline = 'middle';
     const hot = t >= cur.start && t < cur.end + 0.5;
     c.fillStyle = this.paper ? (hot ? rgba('signal', 1) : rgba('ink', 0.92)) : hot ? rgba('ember', 1) : rgba('bone', sung ? 0.95 : 0.4);
-    c.fillText('愛', 0, 0);
+    c.fillText('愛憎', 0, 0);
     c.restore();
   }
 
@@ -196,7 +197,7 @@ export default class Mouth extends Scene {
     c.translate(W / 2, 940); c.rotate(hk * Math.PI / 2); c.translate(-W / 2, -940);
     drawRun(c, run, W / 2 - run.width / 2, 940, t, st);
     c.restore();
-    const tail = this.L.words.slice(this.L.words.findIndex((w) => w.w === '言葉の'));
+    const tail = this.L.words.slice(this.L.words.findIndex((w) => w.w === '微笑む'));
     const vst = { ...st, size: 88, gap: 22, romajiSize: 18 };
     const vrun = runV(tail, vst);
     c.save();

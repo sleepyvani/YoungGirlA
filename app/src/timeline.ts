@@ -17,27 +17,28 @@ export function makeTimeline(ly: Lyrics, au: AudioData): TimelineEntry[] {
   const onBeat = (t: number, tol = 0.02) => au.timeOfBeat(Math.floor(au.beatAt(t + tol)));
   /** Cut before the first word of line i. */
   const line = (i: number) => onBeat(ly.lines[i]!.words[0]!.start);
-  /** Cut before the first word `w` of line i. */
-  const word = (i: number, w: string) => onBeat(ly.lines[i]!.words.find((x) => x.w === w)!.start);
   const last = ly.lines[ly.lines.length - 1]!;
   /** The first downbeat after the last sung word has ended. */
   const vocalOut = au.downbeats.find((d) => d >= last.words[last.words.length - 1]!.end) ?? last.end;
 
   const b = {
     scales: line(0),
-    mouth1: line(2),
-    write: line(3),
-    dream: line(4),
-    karui: line(5),
-    cells: line(6),
-    torn: line(7),
-    mouth2: line(8),
-    echo: line(9),
-    hayai: line(10),
-    kowai: line(11),
-    kawaii: line(12),
-    samui: line(13),
-    boku: word(13, 'だからね'),
+    mouth1: line(4),
+    write: line(6),
+    dream: line(8),
+    trip: line(10),
+    samui1: line(11),
+    echo: line(14),
+    cells: line(18),
+    torn: line(20),
+    mouth2: line(22),
+    hana: line(24),
+    chase: line(26),
+    hayai: line(27),
+    kowai: line(34),
+    loop: line(38),
+    samui2: line(39),
+    boku: line(42),
     outro: vocalOut,
     end: au.duration,
   };
@@ -48,18 +49,21 @@ export function makeTimeline(ly: Lyrics, au: AudioData): TimelineEntry[] {
   return [
     E('open', 'open', 0, b.scales),
     E('scales', 'scales', b.scales, b.mouth1),
-    E('mouth1', 'mouth', b.mouth1, b.write, { params: { n: 1, line: 2 } }),
+    E('mouth1', 'mouth', b.mouth1, b.write, { params: { n: 1, lines: [4, 5] } }),
     E('write', 'write', b.write, b.dream),
-    E('dream', 'dream', b.dream, b.karui),
-    E('karui', 'karui', b.karui, b.cells),
+    E('dream', 'dream', b.dream, b.trip),
+    E('trip', 'trip', b.trip, b.samui1),
+    E('samui1', 'samui', b.samui1, b.echo, { params: { lines: [11, 12, 13] } }),
+    E('echo', 'echo', b.echo, b.cells),
     E('cells', 'cells', b.cells, b.torn),
     E('torn', 'torn', b.torn, b.mouth2),
-    E('mouth2', 'mouth', b.mouth2, b.echo, { params: { n: 2, line: 8 } }),
-    E('echo', 'echo', b.echo, b.hayai),
+    E('mouth2', 'mouth', b.mouth2, b.hana, { params: { n: 2, lines: [22, 23] } }),
+    E('hana', 'hana', b.hana, b.chase),
+    E('chase', 'chase', b.chase, b.hayai),
     E('hayai', 'hayai', b.hayai, b.kowai),
-    E('kowai', 'kowai', b.kowai, b.kawaii),
-    E('kawaii', 'kawaii', b.kawaii, b.samui),
-    E('samui', 'samui', b.samui, b.boku),
+    E('kowai', 'kowai', b.kowai, b.loop),
+    E('loop', 'loop', b.loop, b.samui2),
+    E('samui2', 'samui', b.samui2, b.boku, { params: { lines: [39, 40, 41] } }),
     E('boku', 'boku', b.boku, b.outro),
     E('outro', 'outro', b.outro, b.end),
   ];

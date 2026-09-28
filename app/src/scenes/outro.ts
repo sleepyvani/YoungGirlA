@@ -1,5 +1,5 @@
 // "Index of the record" (instrumental outro). The file closes itself in the machine's voice: an index
-// of the exhibits types one entry per bar, each with its timecode and its word; then the seal
+// of the exhibits types one entry per half bar, each with its timecode and its word; then the seal
 // 記録終了 lands, the record line runs to its end, and the page goes to ink for the credits.
 import * as THREE from 'three';
 import { Scene, type Frame } from '../engine/scene';
@@ -11,9 +11,10 @@ import { ease, frameIdx, keys, prog, smoothstep } from '../engine/util';
 import { Ground, beatsIn, label, pulseAt, sealCanvas, stamp } from './_kit';
 
 const ENTRIES: [string, string, string][] = [
-  ['01', '天秤', '命の価値'], ['02', '口', '口までの愛'], ['03', '原稿', '言葉を書く'], ['04', '夢の粒', '明日に架ける'],
-  ['05', '軽い', '足りないね'], ['06', '細胞', '僕であるために'], ['07', '断片', 'ちぎれ集め'], ['08', '響', '愛を追いかけてた'],
-  ['09', '早い', '追いつけないよ'], ['10', '憎 / 夢 / 怖', '明日も夢を見てたい'], ['11', '可愛い', '嘘'], ['12', '寒い', '−11.0°C'],
+  ['01', '天秤', '僕の命'], ['02', '口', '朽ちるまでの愛憎'], ['03', '原稿', '言葉を書く'], ['04', '夢の粒', '夢を集めて'],
+  ['05', 'つまずき', 'つまずいたって'], ['06', '寒い', '寄らないで'], ['07', '声 / 遠い', '傷つけないで'], ['08', '細胞', '何番目でも'],
+  ['09', '断片', 'ちぎり集め'], ['10', '遠い夢', '追いかけてさ'], ['11', '花', '諦めたから'], ['12', '早い / 憎い', '許されないの'],
+  ['13', '夢 / 怖い', '近づかないで'], ['14', '繰り返す', '愛 言葉を'], ['15', '僕', '僕であるために'],
 ];
 
 export default class Outro extends Scene {
@@ -30,7 +31,7 @@ export default class Outro extends Scene {
     this.beats = beatsIn(audio, this.ctx.start - 1, this.ctx.end + 1);
     this.seal = sealCanvas(['記録', '終了'], 240, 'square', 61);
     // each exhibit's first lyric time, for the index
-    const firsts = [0, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13].map((i) => lyrics.lines[i]!.start);
+    const firsts = [0, 4, 6, 8, 10, 11, 14, 18, 20, 26, 24, 27, 34, 38, 43].map((i) => lyrics.lines[i]!.start);
     this.times = firsts;
   }
 
@@ -38,9 +39,10 @@ export default class Outro extends Scene {
     const { renderer } = this.ctx;
     const t = f.t;
     const D = (i: number) => this.D[i] ?? this.ctx.start + i * 1.837;
-    // timing: one entry per bar from D0; the seal after the last; ink from there
-    const entryT = (i: number) => D(i);
-    const sealT = D(ENTRIES.length + 1);
+    // timing: one entry per half bar; the seal after the last; ink from there
+    const bt = this.beats.filter((b) => b >= this.ctx.start - 0.05);
+    const entryT = (i: number) => bt[i * 2] ?? D(i);
+    const sealT = bt[ENTRIES.length * 2 + 4] ?? D(ENTRIES.length);
     const inkT = sealT + 3.0;
     const endFade = smoothstep(this.ctx.end - 5, this.ctx.end - 0.5, t);
     const paper = 1 - smoothstep(inkT - 0.1, inkT + 0.6, t);
@@ -58,7 +60,7 @@ export default class Outro extends Scene {
         const te = entryT(i);
         if (t < te) return;
         const k = prog(t, te, te + 0.35);
-        const y = 240 + i * 58;
+        const y = 232 + i * 46;
         c.font = font(F.mono(500), 22); c.fillStyle = inkC(0.6);
         c.fillText(`EXHIBIT ${n}`, 212, y);
         c.font = font(F.dot(), 28); c.fillStyle = inkC(0.9);

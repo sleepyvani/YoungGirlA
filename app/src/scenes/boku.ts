@@ -1,8 +1,7 @@
-// "The record, corrected" (line 13, second half: だからね でもね でもね 僕が僕であるために).
+// "The record, corrected" (lines 42–43: 何番目でも 何番目でも 僕が僕であるために).
 // The case file from the opening, again on bone paper:
-//   だからね          — typed into the notes row (備考)
-//   でもね            — the eye bar slides off the photo
-//   でもね            — the photo's mosaic starts to refine… but there is no face under it: the
+//   何番目でも        — typed into the notes row (備考); the eye bar slides off the photo
+//   何番目でも        — the photo's mosaic starts to refine… but there is no face under it: the
 //                      picture is the character 僕
 //   僕が              — the red pen strikes the seal 少女A in the name field
 //   僕で              — and writes 僕 beside it, in vermilion
@@ -32,12 +31,10 @@ export default class Boku extends Scene {
 
   override init() {
     const { lyrics, audio } = this.ctx;
-    this.L = lyrics.lines[13]!;
-    const ws = this.L.words;
-    const i0 = ws.findIndex((w) => w.w === 'だからね');
-    this.words = ws.slice(i0);
-    this.dakara = ws[i0]!;
-    this.demo = this.words.filter((w) => w.w === 'でもね');
+    this.L = lyrics.lines[42]!;
+    this.words = [...lyrics.lines[42]!.words, ...lyrics.lines[43]!.words];
+    this.dakara = this.words[0]!;
+    this.demo = this.words.filter((w) => w.w === '何番目でも');
     this.ga = this.words.find((w) => w.w === '僕が')!;
     this.de = this.words.find((w) => w.w === '僕で')!;
     this.aru = this.words.find((w) => w.w === 'あるために')!;
@@ -85,9 +82,9 @@ export default class Boku extends Scene {
       c.fillText('僕', SEAL.x + 120, y0 + rowH + 42);
       c.restore();
     }
-    // notes: the words typed in (だからね でもね でもね …)
+    // notes: the words typed in (何番目でも 何番目でも)
     const st = { family: F.sans(700), size: 34, gap: 14, romaji: false, unsung: ink(0.15), sung: ink(0.9), ghost: 0.2 };
-    drawRun(c, runH(this.words.slice(0, 3), st), x0 + 262, y0 + 5 * rowH + 54, t, st);
+    drawRun(c, runH(this.words.slice(0, 2), st), x0 + 262, y0 + 5 * rowH + 54, t, st);
     // photo: content (僕, or the silhouette before でもね#2), drawn plain; the mosaic is applied after
     c.fillStyle = 'rgb(222,216,207)'; c.fillRect(PHOTO.x, PHOTO.y, PHOTO.w, PHOTO.h);
     const g = smoothstep(this.demo[1]!.start - 0.2, this.demo[1]!.start + 0.2, t);
@@ -114,7 +111,7 @@ export default class Boku extends Scene {
     c.restore();
     // the lyric, large, bottom-left: 僕が僕であるために
     const st2 = { family: F.sans(900), size: 96, gap: 18, romajiSize: 18, unsung: ink(0.14), sung: ink(0.92), romajiColor: ink(0.5), ghost: 0.35 };
-    drawRun(c, runH(this.words.slice(3), st2), 212, 960, t, st2);
+    drawRun(c, runH(this.words.slice(2), st2), 212, 960, t, st2);
     this.ctx.comp.draw(renderer, L.upload(), this.rt);
     // mosaic only inside the photo (screen rect under the camera)
     const sx = (x: number) => (x - fx) * zoom + W / 2, sy = (y: number) => (y - 540) * zoom + H / 2;
