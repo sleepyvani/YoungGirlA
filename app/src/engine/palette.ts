@@ -1,7 +1,7 @@
 import { hexToLinear } from './util';
 
 // The whole video lives in a restrained palette: ink, bone (the paper of the record), and one signal
-// colour, the vermilion of a seal (朱肉). One rare accent (pink, the 可愛い stickers) — see docs/TREATMENT.md.
+// colour, the vermilion of a seal (朱肉). One rare accent (pink, the two sticker flowers of 子供騙しの花) — see docs/TREATMENT.md.
 export const HEX = {
   ink: '#0B0A0C', // background black (slightly cool)
   ink2: '#161418', // raised black (panels, paper-in-the-dark)
@@ -11,7 +11,7 @@ export const HEX = {
   signal: '#F03A24', // vermilion (朱): the seal, the red pen, the sung word
   ember: '#FF7A57', // hotter, lighter vermilion for cores/highlights
   blood: '#9E1420', // deep red for shadows of signal
-  pink: '#FF8FB8', // accent: only for the 可愛い stickers
+  pink: '#FF8FB8', // accent: only for the 子供騙しの花 stickers
 } as const;
 
 export type PaletteKey = keyof typeof HEX;
