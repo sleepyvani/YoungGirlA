@@ -304,7 +304,7 @@ vec2 mosaicUV(vec2 uv, float cellPx, vec2 origin) {
  */
 export class MosaicPass {
   pass = new FSPass(/* glsl */ `
-    uniform sampler2D src; uniform float cell; uniform vec4 rect; uniform float soft; uniform float amount; uniform float jitter;
+    uniform sampler2D src; uniform float cell; uniform vec4 rect; uniform float soft; uniform float amount; uniform float jitter; uniform float jitterSeed;
     ${GLSL_MOSAIC}
     void main() {
       vec2 px = vec2(vUv.x, 1.0 - vUv.y) * vec2(1920.0, 1080.0);
@@ -312,12 +312,12 @@ export class MosaicPass {
       float inside = 1.0 - smoothstep(-soft, 0.0, max(d.x, d.y));
       vec4 plain = texture(src, vUv);
       if (cell <= 1.0 || inside * amount <= 0.0) { fragColor = plain; return; }
-      vec2 o = rect.xy + jitter * (hash22(vec2(floor(jitter * 60.0), 3.0)) - 0.5) * cell;
+      vec2 o = rect.xy + jitter * (hash22(vec2(jitterSeed, 3.0)) - 0.5) * cell;
       vec2 uvm = mosaicUV(vec2(vUv.x, 1.0 - vUv.y), cell, o);
       vec4 m = texture(src, vec2(uvm.x, 1.0 - uvm.y));
       fragColor = mix(plain, m, inside * amount);
-    }`, { src: { value: null }, cell: { value: 24 }, rect: { value: new THREE.Vector4(0, 0, 1920, 1080) }, soft: { value: 0 }, amount: { value: 1 }, jitter: { value: 0 } });
-  render(renderer: THREE.WebGLRenderer, src: THREE.Texture, out: THREE.WebGLRenderTarget, o: { cell: number; rect?: [number, number, number, number]; soft?: number; amount?: number; jitter?: number }) {
+    }`, { src: { value: null }, cell: { value: 24 }, rect: { value: new THREE.Vector4(0, 0, 1920, 1080) }, soft: { value: 0 }, amount: { value: 1 }, jitter: { value: 0 }, jitterSeed: { value: 0 } });
+  render(renderer: THREE.WebGLRenderer, src: THREE.Texture, out: THREE.WebGLRenderTarget, o: { cell: number; rect?: [number, number, number, number]; soft?: number; amount?: number; jitter?: number; seed?: number }) {
     const u = this.pass.u;
     u.src!.value = src;
     u.cell!.value = o.cell;
@@ -325,6 +325,7 @@ export class MosaicPass {
     u.soft!.value = o.soft ?? 0;
     u.amount!.value = o.amount ?? 1;
     u.jitter!.value = o.jitter ?? 0;
+    u.jitterSeed!.value = (o.seed ?? 0) % 997;
     this.pass.render(renderer, out);
   }
 }
