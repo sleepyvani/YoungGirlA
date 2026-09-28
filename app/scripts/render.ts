@@ -4,6 +4,7 @@
 //   sheet:   bun scripts/render.ts sheet --from 20 --to 35 [--n 12] [--cols 4] [--only ids] [--out file.png]   (or --times a,b,c | --cuts)
 //            --jobs N renders N segments in parallel Chromes and joins them; --nvenc encodes on an NVIDIA GPU;
 //            --text-once draws the 2D (text) layers once per frame instead of per sub-frame (faster, text unblurred)
+//   thumbnail: bun scripts/render.ts stills --thumb --t 5 --out ../out/thumb   (the YouTube thumbnail plate)
 //   (--chrome <path> or $CHROME_PATH picks the browser; default: Chrome on macOS, playwright's Chromium elsewhere)
 //   perf:    bun scripts/render.ts perf --from 20 --to 25 [--only ids] [--samples 1] [--shutter 0.5]   (avg ms per frame incl. GPU sync and the export's pixel readback)
 //   video:   bun scripts/render.ts video [--from 0] [--to 242.04] [--fps 60] [--crf 16] [--x264 aq-mode=3] [--samples 1] [--shutter 0.5] [--out ../out/younggirla.mp4] [--noaudio]
@@ -80,7 +81,7 @@ async function openPage(url: string) {
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
   const only = opt('only');
-  await page.goto(`${url}/?export=1${only ? `&only=${only}` : ''}${SCALE !== 1 ? `&scale=${SCALE}` : ''}${flag('text-once') ? '&textonce=1' : ''}`);
+  await page.goto(`${url}/?export=1${only ? `&only=${only}` : ''}${SCALE !== 1 ? `&scale=${SCALE}` : ''}${flag('text-once') ? '&textonce=1' : ''}${flag('thumb') ? '&thumb=1' : ''}`);
   await page.waitForFunction(() => (window as any).__mv?.ready || (window as any).__mv?.error, null, { timeout: 120000 });
   const err = await page.evaluate(() => (window as any).__mv.error);
   if (err) throw new Error(`app failed to boot:\n${err}\n${logs.join('\n')}`);

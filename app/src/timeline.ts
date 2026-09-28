@@ -46,6 +46,9 @@ export function makeTimeline(ly: Lyrics, au: AudioData): TimelineEntry[] {
   const E = (id: string, file: string, start: number, end: number, extra: Partial<TimelineEntry> = {}): TimelineEntry =>
     ({ id, load: scene(file), start, end, ...extra });
 
+  // the YouTube thumbnail (?thumb, render.ts --thumb): one still plate on its own
+  if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('thumb')) return [E('thumb', 'thumb', 0, b.end)];
+
   return [
     E('open', 'open', 0, b.scales),
     E('scales', 'scales', b.scales, b.mouth1),
